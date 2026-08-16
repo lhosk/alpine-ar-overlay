@@ -31,3 +31,7 @@ target_link_libraries(export_obj PRIVATE GDAL::GDAL)
 add_executable(render_view src/render_view.cpp src/dem.cpp)
 target_include_directories(render_view PRIVATE include)
 target_link_libraries(render_view PRIVATE GDAL::GDAL ${OpenCV_LIBS})
+
+add_executable(overlay src/overlay.cpp src/dem.cpp)
+target_include_directories(overlay PRIVATE include)
+target_link_libraries(overlay PRIVATE GDAL::GDAL ${OpenCV_LIBS})
