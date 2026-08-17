@@ -72,3 +72,40 @@ this is the main open finding
 3. more photos, more sites, report a spread rather than one number
 4. automatic skyline detection — hsv threshold and vertical-gradient methods
    both failed on this image (hazy sky, road edges, autumn colour)
+
+## near-ridge investigation (resolved)
+
+three hypotheses for why yaw+pitch cannot fit near and far ridges together:
+
+| hypothesis | test | rms | verdict |
+|---|---|---|---|
+| position error | 4-param fit, yaw/pitch/east/north | 38.7 px | ruled out |
+| roll | 3-param fit, yaw/pitch/roll | 37.5 px, roll -> 0.0 deg | ruled out |
+| canopy | near-only fit | wants +2.6 deg pitch vs far fit | supported |
+
+adding position freedom let the camera move 88 m and did not help. adding
+roll converged to exactly zero and did not help. no camera pose explains
+the near ridge
+
+near-only fit: yaw 209 deg, pitch 6.31 deg, rms 38.9 px — it cannot even
+fit itself well with two free parameters, meaning the near skyline's
+*shape* is wrong in the dem, not just its offset
+
+**conclusion**: the mismatch is in the terrain model, not the camera model.
+the dem is bare earth; the near hillside carries mature forest. at ~400 m,
+25 m of canopy is ~3.6 deg ~ 130 px, the right order for the residual
+
+implication for outdoor ar in forested terrain: bare-earth dems are
+sufficient for far skylines (>10 km, 0.28 deg achieved) and insufficient
+for near ones. a canopy height model is needed for near-field registration
+
+## performance
+
+| change | time (2-param fit, 29 pts) |
+|---|---|
+| initial | 11 min |
+| -O2 (was building -O0) | 2 min 21 s |
+| -O3 -march=native | 2 min 58 s (worse, reverted) |
+| + openmp, 16 threads | **39 s** |
+
+17x total. the single biggest win was noticing cmake had no build type set

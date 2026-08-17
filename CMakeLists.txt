@@ -62,3 +62,4 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 
 find_package(OpenMP REQUIRED)
 target_link_libraries(fit_pose PRIVATE OpenMP::OpenMP_CXX)
+target_link_libraries(fit_pose4 PRIVATE OpenMP::OpenMP_CXX)

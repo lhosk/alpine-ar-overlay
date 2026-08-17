@@ -13,13 +13,20 @@
 struct Cam { double e, n, u, fx, fy, cx, cy, znear; int W, H; };
 
 // render skyline row per column for a given yaw/pitch; -1 where no terrain
-static void render_skyline(const Dem& d, const Cam& c, double yaw_d, double pitch_d,
+static void render_skyline(const Dem& d, const Cam& c, double yaw_d, double pitch_d, double roll_d,
                            std::vector<int>& line) {
     const double psi = yaw_d * M_PI / 180.0, th = pitch_d * M_PI / 180.0;
-    const double R[3][3] = {
+    const double B[3][3] = {
         { std::cos(psi),                -std::sin(psi),                0.0           },
         { std::sin(psi) * std::sin(th),  std::cos(psi) * std::sin(th), -std::cos(th) },
         { std::sin(psi) * std::cos(th),  std::cos(psi) * std::cos(th),  std::sin(th) }
+    };
+    const double phi = roll_d * M_PI / 180.0;
+    const double cr = std::cos(phi), sr = std::sin(phi);
+    const double R[3][3] = {
+        { cr*B[0][0]+sr*B[1][0], cr*B[0][1]+sr*B[1][1], cr*B[0][2]+sr*B[1][2] },
+        { -sr*B[0][0]+cr*B[1][0], -sr*B[0][1]+cr*B[1][1], -sr*B[0][2]+cr*B[1][2] },
+        { B[2][0], B[2][1], B[2][2] }
     };
 
     const size_t nv = d.east.size();
@@ -119,9 +126,9 @@ int main(int argc, char** argv) {
     std::cout << "cam enu: " << c.e << ", " << c.n << ", " << c.u << " m\n";
     std::cout << "fx = " << c.fx << " px\n\n";
 
-    auto cost = [&](double yaw, double pitch, int* used) {
+    auto cost = [&](double yaw, double pitch, double roll, int* used) {
         std::vector<int> line;
-        render_skyline(d, c, yaw, pitch, line);
+        render_skyline(d, c, yaw, pitch, roll, line);
         double s = 0.0; int n = 0;
         for (auto& p : obs) {
             if (p.first < 0 || p.first >= c.W) continue;
@@ -135,32 +142,35 @@ int main(int argc, char** argv) {
     };
 
     // coarse then fine
-    double best_y = yaw0, best_p = pit0, best_c = 1e9;
-    double yr = 20.0, pr = 10.0, ys = 2.0, ps = 1.0;
+    double best_y = yaw0, best_p = pit0, best_r = 0.0, best_c = 1e9;
+    double yr = 20.0, pr = 10.0, rr = 8.0, ys = 2.0, ps = 1.0, rs = 2.0;
 
     for (int pass = 0; pass < 3; ++pass) {
-        double by = best_y, bp = best_p;
+        double by = best_y, bp = best_p, br = best_r;
         int ny = (int)std::round(2*yr/ys) + 1;
         int np = (int)std::round(2*pr/ps) + 1;
+        int nr = (int)std::round(2*rr/rs) + 1;
 
-        #pragma omp parallel for collapse(2) schedule(dynamic)
+        #pragma omp parallel for collapse(3) schedule(dynamic)
         for (int iy = 0; iy < ny; ++iy)
-            for (int ip = 0; ip < np; ++ip) {
+            for (int ip = 0; ip < np; ++ip)
+              for (int ir = 0; ir < nr; ++ir) {
                 double y = by - yr + iy*ys;
                 double p = bp - pr + ip*ps;
+                double r = br - rr + ir*rs;
                 int used = 0;
-                double cst = cost(y, p, &used);
+                double cst = cost(y, p, r, &used);
                 if (used < (int)obs.size()/2) continue;
                 #pragma omp critical
-                if (cst < best_c) { best_c = cst; best_y = y; best_p = p; }
+                if (cst < best_c) { best_c = cst; best_y = y; best_p = p; best_r = r; }
             }
-        std::cout << "pass " << pass << ": yaw " << best_y << ", pitch " << best_p
+        std::cout << "pass " << pass << ": yaw " << best_y << ", pitch " << best_p << ", roll " << best_r
                   << ", rms " << best_c << " px\n";
-        yr = ys*2; pr = ps*2; ys /= 4; ps /= 4;
+        yr = ys*2; pr = ps*2; rr = rs*2; ys /= 4; ps /= 4; rs /= 4;
     }
 
     int used = 0;
-    cost(best_y, best_p, &used);
+    cost(best_y, best_p, best_r, &used);
 
     double ang = std::atan(best_c / c.fy) * 180.0 / M_PI;
     std::cout << "\nbest yaw:   " << best_y << " deg\n";

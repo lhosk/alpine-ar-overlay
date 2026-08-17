@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <vector>
+#include <omp.h>
 
 struct Cam { double e, n, u, fx, fy, cx, cy, znear; int W, H; };
 
