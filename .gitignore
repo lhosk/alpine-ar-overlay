@@ -71,3 +71,5 @@ build/
 data/raw/
 *.tif
 *.mp4
+data/*.png
+data/*.obj
