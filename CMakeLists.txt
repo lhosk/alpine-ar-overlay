@@ -56,3 +56,9 @@ target_link_libraries(fit_pose PRIVATE GDAL::GDAL ${OpenCV_LIBS})
 add_executable(fit_pose4 src/fit_pose4.cpp src/dem.cpp)
 target_include_directories(fit_pose4 PRIVATE include)
 target_link_libraries(fit_pose4 PRIVATE GDAL::GDAL ${OpenCV_LIBS})
+
+set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_CXX_FLAGS_RELEASE "-O2")
+
+find_package(OpenMP REQUIRED)
+target_link_libraries(fit_pose PRIVATE OpenMP::OpenMP_CXX)

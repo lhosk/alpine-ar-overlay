@@ -8,6 +8,7 @@
 #include <iostream>
 #include <limits>
 #include <vector>
+#include <omp.h>
 
 struct Cam { double e, n, u, fx, fy, cx, cy, znear; int W, H; };
 
@@ -22,9 +23,22 @@ static void render_skyline(const Dem& d, const Cam& c, double yaw_d, double pitc
     };
 
     const size_t nv = d.east.size();
-    std::vector<double> px(nv), py(nv), pz(nv);
+    std::vector<double> px, py, pz;
+    px.assign(nv, 0.0); py.assign(nv, 0.0); pz.assign(nv, -1.0);
+
+    // fov half-angle plus margin; skip vertices well outside the view cone
+    const double halffov = std::atan(c.W * 0.5 / c.fx) * 1.6;
+    const double cy_ = std::cos(psi), sy_ = std::sin(psi);
+
     for (size_t i = 0; i < nv; ++i) {
-        double we = d.east[i]-c.e, wn = d.north[i]-c.n, wu = d.elev[i]-c.u;
+        double we = d.east[i]-c.e, wn = d.north[i]-c.n;
+        // forward component in the horizontal plane
+        double fwd = sy_*we + cy_*wn;
+        if (fwd <= 0.0) continue;
+        double side = cy_*we - sy_*wn;
+        if (std::abs(side) > fwd * std::tan(halffov)) continue;
+
+        double wu = d.elev[i]-c.u;
         double xc = R[0][0]*we + R[0][1]*wn + R[0][2]*wu;
         double yc = R[1][0]*we + R[1][1]*wn + R[1][2]*wu;
         double zc = R[2][0]*we + R[2][1]*wn + R[2][2]*wu;
@@ -48,16 +62,20 @@ static void render_skyline(const Dem& d, const Cam& c, double yaw_d, double pitc
         if (std::abs(area) < 1e-12) continue;
         int maxy = std::min((int)std::ceil(std::max({y0,y1,y2})), c.H-1);
 
-        for (int x = minx; x <= maxx; ++x)
-            for (int y = miny; y <= maxy && y < top[x]; ++y) {
-                double fxp=x+0.5, fyp=y+0.5;
-                double w0 = ((x1-fxp)*(y2-fyp)-(x2-fxp)*(y1-fyp))/area;
-                double w1 = ((x2-fxp)*(y0-fyp)-(x0-fxp)*(y2-fyp))/area;
-                double w2 = 1.0-w0-w1;
-                if (w0<0||w1<0||w2<0) continue;
+        auto edge = [&](double ax, double ay, double bx, double by) {
+            if (bx < ax) { std::swap(ax,bx); std::swap(ay,by); }
+            int xa = std::max((int)std::ceil(ax), 0);
+            int xb = std::min((int)std::floor(bx), c.W-1);
+            if (xb < xa) return;
+            double dxe = bx - ax;
+            for (int x = xa; x <= xb; ++x) {
+                double t = (dxe > 1e-12) ? (x - ax) / dxe : 0.0;
+                int y = (int)std::lround(ay + t * (by - ay));
+                if (y < 0) y = 0;
                 if (y < top[x]) top[x] = y;
-                break;
             }
+        };
+        edge(x0,y0,x1,y1); edge(x1,y1,x2,y2); edge(x2,y2,x0,y0);
     }
     for (int x = 0; x < c.W; ++x) line[x] = (top[x] < c.H) ? top[x] : -1;
 }
@@ -122,11 +140,18 @@ int main(int argc, char** argv) {
 
     for (int pass = 0; pass < 3; ++pass) {
         double by = best_y, bp = best_p;
-        for (double y = by - yr; y <= by + yr + 1e-9; y += ys)
-            for (double p = bp - pr; p <= bp + pr + 1e-9; p += ps) {
+        int ny = (int)std::round(2*yr/ys) + 1;
+        int np = (int)std::round(2*pr/ps) + 1;
+
+        #pragma omp parallel for collapse(2) schedule(dynamic)
+        for (int iy = 0; iy < ny; ++iy)
+            for (int ip = 0; ip < np; ++ip) {
+                double y = by - yr + iy*ys;
+                double p = bp - pr + ip*ps;
                 int used = 0;
                 double cst = cost(y, p, &used);
                 if (used < (int)obs.size()/2) continue;
+                #pragma omp critical
                 if (cst < best_c) { best_c = cst; best_y = y; best_p = p; }
             }
         std::cout << "pass " << pass << ": yaw " << best_y << ", pitch " << best_p
