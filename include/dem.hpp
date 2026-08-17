@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -28,5 +29,7 @@ struct Dem {
     float elev_max = 0.f;
 };
 
-bool load_dem(const std::string& path, Dem& out);
+// pass lon/lat to anchor the enu origin; NaN uses grid center
+bool load_dem(const std::string& path, Dem& out,
+              double anchor_lon = std::nan(""), double anchor_lat = std::nan(""));
 void build_mesh(Dem& d);

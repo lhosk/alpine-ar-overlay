@@ -16,7 +16,7 @@ int main(int argc, char** argv) {
     }
 
     Dem d;
-    if (!load_dem(argv[1], d)) return 1;
+    if (!load_dem(argv[1], d, -81.812135, 36.094976)) return 1;
     build_mesh(d);
 
     cv::Mat photo = cv::imread(argv[2], cv::IMREAD_COLOR);

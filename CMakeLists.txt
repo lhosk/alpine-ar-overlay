@@ -52,3 +52,7 @@ target_link_libraries(pick PRIVATE ${OpenCV_LIBS})
 add_executable(fit_pose src/fit_pose.cpp src/dem.cpp)
 target_include_directories(fit_pose PRIVATE include)
 target_link_libraries(fit_pose PRIVATE GDAL::GDAL ${OpenCV_LIBS})
+
+add_executable(fit_pose4 src/fit_pose4.cpp src/dem.cpp)
+target_include_directories(fit_pose4 PRIVATE include)
+target_link_libraries(fit_pose4 PRIVATE GDAL::GDAL ${OpenCV_LIBS})

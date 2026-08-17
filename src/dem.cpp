@@ -9,7 +9,7 @@ constexpr double kEarthR = 6378137.0;
 constexpr double kDeg2Rad = M_PI / 180.0;
 }
 
-bool load_dem(const std::string& path, Dem& out) {
+bool load_dem(const std::string& path, Dem& out, double anchor_lon, double anchor_lat) {
     GDALAllRegister();
 
     GDALDataset* ds = (GDALDataset*)GDALOpen(path.c_str(), GA_ReadOnly);
@@ -42,9 +42,14 @@ bool load_dem(const std::string& path, Dem& out) {
         if (e > out.elev_max) out.elev_max = e;
     }
 
-    // enu origin at grid center
-    out.lon0 = out.gt[0] + ((out.width  - 1) * 0.5) * out.gt[1];
-    out.lat0 = out.gt[3] + ((out.height - 1) * 0.5) * out.gt[5];
+    // enu origin: explicit anchor, else grid center
+    if (std::isnan(anchor_lon) || std::isnan(anchor_lat)) {
+        out.lon0 = out.gt[0] + ((out.width  - 1) * 0.5) * out.gt[1];
+        out.lat0 = out.gt[3] + ((out.height - 1) * 0.5) * out.gt[5];
+    } else {
+        out.lon0 = anchor_lon;
+        out.lat0 = anchor_lat;
+    }
 
     return true;
 }
