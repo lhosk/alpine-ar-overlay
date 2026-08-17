@@ -63,3 +63,15 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 find_package(OpenMP REQUIRED)
 target_link_libraries(fit_pose PRIVATE OpenMP::OpenMP_CXX)
 target_link_libraries(fit_pose4 PRIVATE OpenMP::OpenMP_CXX)
+
+add_executable(contour src/contour.cpp src/dem.cpp)
+target_include_directories(contour PRIVATE include)
+target_link_libraries(contour PRIVATE GDAL::GDAL ${OpenCV_LIBS})
+
+add_executable(export_web src/export_web.cpp src/dem.cpp)
+target_include_directories(export_web PRIVATE include)
+target_link_libraries(export_web PRIVATE GDAL::GDAL)
+
+add_executable(fit_yaw src/fit_yaw.cpp src/dem.cpp)
+target_include_directories(fit_yaw PRIVATE include)
+target_link_libraries(fit_yaw PRIVATE GDAL::GDAL OpenMP::OpenMP_CXX)

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>alpine-ar-overlay pose tuner</title>
+<style>
+  body { margin:0; background:#111; color:#ddd; font:13px monospace; overflow:hidden; }
+  #view { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:min(100vw, 133.33vh); height:min(75vw, 100vh); }
+  #photo { position:fixed; inset:0; width:100%; height:100%; object-fit:contain; }
+  #gl { position:absolute; inset:0; }
+  #panel { position:fixed; top:10px; left:10px; z-index:10; background:rgba(0,0,0,.75);
+           padding:12px 14px; border-radius:6px; width:260px; }
+  .row { margin:7px 0; }
+  label { display:block; margin-bottom:2px; color:#8cf; }
+  input[type=range] { width:100%; }
+  .val { float:right; color:#fff; }
+  button { background:#245; color:#cef; border:1px solid #48a; padding:4px 8px;
+           border-radius:4px; cursor:pointer; margin-right:4px; }
+  #err { color:#f88; }
+</style>
+</head>
+<body>
+<div id="view">
+  <img id="photo" src="photo.jpg">
+  <canvas id="gl"></canvas>
+</div>
+
+<div id="panel">
+  <div class="row"><label>yaw <span class="val" id="vyaw">196.0</span></label>
+    <input type="range" id="yaw" min="150" max="260" step="0.25" value="196"></div>
+  <div class="row"><label>pitch <span class="val" id="vpitch">3.69</span></label>
+    <input type="range" id="pitch" min="-15" max="25" step="0.05" value="3.6875"></div>
+  <div class="row"><label>roll <span class="val" id="vroll">0.0</span></label>
+    <input type="range" id="roll" min="-15" max="15" step="0.1" value="0"></div>
+  <div class="row"><label>east <span class="val" id="veast">0</span> m</label>
+    <input type="range" id="east" min="-400" max="400" step="5" value="0"></div>
+  <div class="row"><label>north <span class="val" id="vnorth">0</span> m</label>
+    <input type="range" id="north" min="-400" max="400" step="5" value="0"></div>
+  <div class="row"><label>height agl <span class="val" id="vagl">1.6</span> m</label>
+    <input type="range" id="agl" min="-40" max="60" step="0.5" value="1.6"></div>
+  <div class="row"><label>hfov <span class="val" id="vfov">69.4</span> deg</label>
+    <input type="range" id="fov" min="30" max="100" step="0.2" value="69.39"></div>
+  <div class="row"><label>opacity <span class="val" id="vop">0.75</span></label>
+    <input type="range" id="op" min="0" max="1" step="0.05" value="0.75"></div>
+  <div class="row">
+    <button id="solved">solved</button>
+    <button id="guess">eyeball</button>
+    <button id="wire">wire/solid</button>
+  </div>
+  <div class="row" id="err"></div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+const canvas = document.getElementById('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true });
+renderer.setPixelRatio(devicePixelRatio);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, 1, 10, 60000);
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+sun.position.set(-1, 1.2, 1).normalize();
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0x556677, 0.7));
+
+let mesh = null, wireMode = false;
+let camGroundY = 0;
+
+// terrain elevation lookup by nearest vertex, for the agl slider
+let vertsRef = null;
+
+fetch('terrain.bin').then(r => {
+  if (!r.ok) throw new Error('terrain.bin not found (' + r.status + ')');
+  return r.arrayBuffer();
+}).then(buf => {
+  const head = new Uint32Array(buf, 0, 2);
+  const nv = head[0], nt = head[1];
+  const verts = new Float32Array(buf, 8, nv*3);
+  const tris  = new Uint32Array(buf, 8 + nv*12, nt);
+  vertsRef = verts;
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  g.setIndex(new THREE.BufferAttribute(tris, 1));
+  g.computeVertexNormals();
+
+  const m = new THREE.MeshLambertMaterial({
+    color: 0x66ddff, transparent:true, opacity:0.75,
+    side: THREE.DoubleSide, depthWrite:true
+  });
+  mesh = new THREE.Mesh(g, m);
+  scene.add(mesh);
+
+  document.getElementById('err').textContent =
+    nv.toLocaleString() + ' verts / ' + (nt/3).toLocaleString() + ' tris';
+  update();
+}).catch(e => {
+  document.getElementById('err').textContent = e.message;
+});
+
+function groundAt(e, n) {
+  if (!vertsRef) return 0;
+  let best = 1e18, by = 0;
+  const z = -n;
+  for (let i = 0; i < vertsRef.length; i += 3) {
+    const dx = vertsRef[i] - e, dz = vertsRef[i+2] - z;
+    const d = dx*dx + dz*dz;
+    if (d < best) { best = d; by = vertsRef[i+1]; }
+  }
+  return by;
+}
+
+const ids = ['yaw','pitch','roll','east','north','agl','fov','op'];
+const els = {}; ids.forEach(k => els[k] = document.getElementById(k));
+const vals = {}; ids.forEach(k => vals[k] = document.getElementById('v'+k));
+
+let lastPos = null;
+
+function update() {
+  if (!mesh) return;
+  const yaw = +els.yaw.value, pitch = +els.pitch.value, roll = +els.roll.value;
+  const e = +els.east.value, n = +els.north.value, agl = +els.agl.value;
+  const fov = +els.fov.value, op = +els.op.value;
+
+  vals.yaw.textContent = yaw.toFixed(2);
+  vals.pitch.textContent = pitch.toFixed(2);
+  vals.roll.textContent = roll.toFixed(1);
+  vals.east.textContent = e;
+  vals.north.textContent = n;
+  vals.agl.textContent = agl.toFixed(1);
+  vals.fov.textContent = fov.toFixed(1);
+  vals.op.textContent = op.toFixed(2);
+
+  mesh.material.opacity = op;
+  mesh.material.wireframe = wireMode;
+
+  // recompute ground height only when position changes (it's an O(n) scan)
+  const key = e + ',' + n;
+  if (key !== lastPos) { camGroundY = groundAt(e, n); lastPos = key; }
+
+  camera.position.set(e, camGroundY + agl, -n);
+
+  // three uses y-up, -z forward. yaw measured from north(-z), clockwise east(+x)
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = -yaw * Math.PI/180;
+  camera.rotation.x =  pitch * Math.PI/180;
+  camera.rotation.z =  roll * Math.PI/180;
+
+  // convert horizontal fov to three's vertical fov
+  const asp = 2880/2160;
+  const hf = fov * Math.PI/180;
+  camera.fov = 2*Math.atan(Math.tan(hf/2)/asp) * 180/Math.PI;
+  camera.aspect = asp;
+  camera.updateProjectionMatrix();
+
+  renderer.render(scene, camera);
+}
+
+ids.forEach(k => els[k].addEventListener('input', update));
+
+document.getElementById('solved').onclick = () => {
+  els.yaw.value = 196; els.pitch.value = 3.6875; els.roll.value = 0;
+  els.east.value = 0; els.north.value = 0; els.agl.value = 1.6;
+  update();
+};
+document.getElementById('guess').onclick = () => {
+  els.yaw.value = 212; els.pitch.value = 5; els.roll.value = 0;
+  els.east.value = 0; els.north.value = 0; els.agl.value = 1.6;
+  update();
+};
+document.getElementById('wire').onclick = () => { wireMode = !wireMode; update(); };
+
+function resize() {
+  const vw=document.getElementById("view"); renderer.setSize(vw.clientWidth, vw.clientHeight, false);
+  update();
+}
+addEventListener('resize', resize);
+resize();
+</script>
+</body>
+</html>
