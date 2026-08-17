@@ -141,6 +141,11 @@ int main(int argc, char** argv) {
         if (used >= (int)obs.size()/2) costs[i] = cst;
     }
 
+    { std::ofstream lf("../data/landscape.txt");
+      for (int i = 0; i < nsteps; ++i)
+          if (costs[i] < 1e8) lf << (ylo+i*step0) << ' ' << costs[i] << '\n';
+    }
+
     int besti = 0;
     for (int i = 1; i < nsteps; ++i) if (costs[i] < costs[besti]) besti = i;
     double by = ylo + besti*step0, bc = costs[besti];

@@ -109,3 +109,21 @@ for near ones. a canopy height model is needed for near-field registration
 | + openmp, 16 threads | **39 s** |
 
 17x total. the single biggest win was noticing cmake had no build type set
+
+## cost landscape (yaw-only fit)
+
+fixed: position (gps prior), pitch 3.69, roll 0. free: yaw. full sweep
+150-260 deg at 0.5 deg, 11 s wall clock with openmp
+
+![cost vs heading](../data/landscape.png)
+
+- global minimum 193.3 deg, rms 8.45 px = 0.233 deg, unique in the range
+- **but discrimination is asymmetric**: cost rises steeply east of the
+  minimum (near hillside enters frame) and stays nearly flat west of it
+  (15-17 px plateau from 150-190 deg)
+- cause: the clicked far ridge has only ~47 px of vertical relief across
+  1200 px of image. low-relief skylines weakly constrain heading
+- implication: method accuracy depends on ridge relief. high-relief
+  alpine skylines are the favorable case; flat appalachian horizons are
+  near the difficulty floor. convergence needs a prior good to roughly
+  +/-20 deg on the east side, looser on the west
