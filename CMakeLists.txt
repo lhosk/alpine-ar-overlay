@@ -35,3 +35,20 @@ target_link_libraries(render_view PRIVATE GDAL::GDAL ${OpenCV_LIBS})
 add_executable(overlay src/overlay.cpp src/dem.cpp)
 target_include_directories(overlay PRIVATE include)
 target_link_libraries(overlay PRIVATE GDAL::GDAL ${OpenCV_LIBS})
+
+add_executable(skyline src/skyline.cpp)
+target_link_libraries(skyline PRIVATE ${OpenCV_LIBS})
+
+add_executable(skyline2 src/skyline2.cpp)
+target_link_libraries(skyline2 PRIVATE ${OpenCV_LIBS})
+
+add_executable(wireframe src/wireframe.cpp src/dem.cpp)
+target_include_directories(wireframe PRIVATE include)
+target_link_libraries(wireframe PRIVATE GDAL::GDAL ${OpenCV_LIBS})
+
+add_executable(pick src/pick.cpp)
+target_link_libraries(pick PRIVATE ${OpenCV_LIBS})
+
+add_executable(fit_pose src/fit_pose.cpp src/dem.cpp)
+target_include_directories(fit_pose PRIVATE include)
+target_link_libraries(fit_pose PRIVATE GDAL::GDAL ${OpenCV_LIBS})
