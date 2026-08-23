@@ -39,6 +39,19 @@ the photo, solve for the heading that aligns them
 
 full numbers: [docs/results.md](docs/results.md)
 
+## structure
+
+    include/dem.hpp, src/dem.cpp   geotiff -> enu mesh (anchored origin)
+    src/fit_yaw.cpp                heading solver + cost landscape sweep
+    src/overlay.cpp                dem + photo + pose -> skyline overlay
+    src/pick.cpp                   click ridge correspondences
+    src/export_web.cpp             mesh -> binary for the web viewer
+    src/mesh_info.cpp              dem diagnostics
+    web/viewer.html                three.js interactive pose tuner
+    data/                          dem, photo, clicked points, results
+    docs/results.md                all experiments and numbers
+    docs/handoff2.md               full project state / context doc
+
 ## build
 
     sudo apt install libopencv-dev libgdal-dev
