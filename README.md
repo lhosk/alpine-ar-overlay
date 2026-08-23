@@ -1,58 +1,58 @@
 # alpine-ar-overlay
 
-overlays crevasse and glacier data onto a live camera view of a mountain
+registering a rendered terrain skyline against real photographs to
+measure and correct the heading error that breaks naive gps+compass
+ar overlays
 
-the crevasses aren't detected from the image, they come from existing map data
-and get lined up with whatever the camera is pointed at
+## the problem
 
-not a nav tool, don't climb off it, crevasse data is coarse and moves
+a phone knows position (gps, ~5 m), pitch and roll (accelerometer,
+~1 deg) — but heading comes from the magnetometer, good to only
+5-15 deg. at 500 m range, 5 deg of heading error puts an overlay
+marker 44 m sideways
 
-## the hard part
+## the fix
 
-position is fine, gps gets you within ~5 m
+render the skyline a dem predicts, match it against the ridgeline in
+the photo, solve for the heading that aligns them
 
-heading is the problem, the magnetometer is off by 5-15 degrees and at 500 m out
-5 degrees of heading error slides the overlay ~44 m sideways
+![solved](docs/img/check_solved.png)
+*dem skyline (green) at the solved heading, 193.3 deg*
 
-fix is to render the skyline from the terrain model, find the skyline in the
-camera frame, then push the pose around until they match, ridgelines are sharp
-and effectively infinitely far away so they pin down orientation well, then fuse
-that with the imu so it doesn't jitter frame to frame
+![magnetometer](docs/img/check_magneto.png)
+*same pipeline at a magnetometer-plausible 212 deg*
 
-comes down to solving for camera pose T
+## results (single photo, blue ridge parkway nc)
 
-    T* = argmin_T  sum_i || u_i_detected - pi(K, T, X_i_DEM) ||
+- solved heading 193.3 deg vs 212 deg naive guess: **~19 deg correction**
+- rms skyline residual **8.45 px = 0.233 deg** against 29 hand-clicked
+  far-ridge points
+- full 110-deg cost sweep: unique minimum, 11 s (openmp, 16 threads)
+- **found limit 1**: bare-earth dems fail for near-field registration
+  in forest — tree canopy (~25 m here) shifts the apparent ridge ~3.6 deg
+  at 400 m. position and roll freedom were tested and ruled out
+- **found limit 2**: heading discrimination scales with ridge relief.
+  this low-relief appalachian skyline gives a flat cost plateau to the
+  west; alpine relief is the favorable case
 
-## layout
+![landscape](docs/img/landscape.png)
 
-    alpine-ar-overlay/
-    |-- CMakeLists.txt
-    |-- README.md
-    |-- .gitignore
-    |-- src/          # the c++
-    |   `-- main.cpp
-    |-- include/      # headers
-    |-- data/         # dems and calibration stuff, data/raw/ is gitignored
-    |-- tools/        # python for data prep and plots
-    |-- tests/
-    |-- docs/         # error analysis, results
-    `-- build/        # gitignored
+full numbers: [docs/results.md](docs/results.md)
 
 ## build
 
-    mkdir -p build && cd build
-    cmake ..
-    make
+    sudo apt install libopencv-dev libgdal-dev
+    mkdir build && cd build && cmake .. && make
 
-c++17, cmake 3.16+, opencv 4.x
+## tools
 
-## data sources
+- `overlay` — dem + photo + pose -> skyline overlay png
+- `pick` — click ridge correspondences in a photo
+- `fit_yaw` — heading solver with full cost-landscape sweep
+- `export_web` + `web/viewer.html` — interactive 3d pose tuner (three.js)
+- `mesh_info` — dem diagnostic
 
-- terrain: copernicus glo-30, usgs 3dep, swissalti3d
-- glaciers: randolph glacier inventory, glims
-- camera intrinsics: calibrated here from checkerboard photos
+## data
 
-## results
-
-nothing yet, numbers go here as they show up, reprojection error in px, heading
-error in deg, overlay error in m at range, latency in ms
+copernicus glo-30 / usgs 3dep via opentopography. dem enu frame is
+anchored at the camera's surveyed lon/lat, not the grid center
