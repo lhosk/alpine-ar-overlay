@@ -56,3 +56,8 @@ full numbers: [docs/results.md](docs/results.md)
 
 copernicus glo-30 / usgs 3dep via opentopography. dem enu frame is
 anchored at the camera's surveyed lon/lat, not the grid center
+
+## license
+
+mit — see [LICENSE](LICENSE). terrain data carries its own (open) terms:
+copernicus glo-30 and usgs 3dep
